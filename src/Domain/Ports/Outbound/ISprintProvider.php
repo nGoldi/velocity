@@ -3,14 +3,13 @@ declare(strict_types=1);
 
 namespace App\Domain\Ports\Outbound;
 
-use App\Domain\Model\ClosedSprint;
-use App\Domain\Model\FutureSprint;
+use App\Domain\Model\Sprint;
 
 interface ISprintProvider
 {
     /**
-     * @return ClosedSprint[]
+     * @return Sprint[]
      */
     public function getClosedSprints(): array;
-    public function getNextSprint(): FutureSprint;
+    public function getNextSprint(): Sprint;
 }

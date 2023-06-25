@@ -3,8 +3,7 @@ declare(strict_types=1);
 
 namespace App\Domain;
 
-use App\Domain\Model\ClosedSprint;
-use App\Domain\Model\FutureSprint;
+use App\Domain\Model\Sprint;
 use App\Domain\Ports\Inbound\IVelocity;
 use App\Domain\Ports\Outbound\IAbsenceProvider;
 use App\Domain\Ports\Outbound\ISprintProvider;
@@ -22,60 +21,60 @@ readonly class VelocityService implements IVelocity
     public function nextSprintVelocity(): int
     {
         $averageVelocity = $this->calculateAverageVelocity();
-        $capacity = $this->calculateCapacity();
+        $capacityNextSprint = $this->calculateSprintCapacity($this->sprintProvider->getNextSprint());
 
-        // todo scale past velocity to full capacity
-
-        return 1;
+        return (int)round($averageVelocity * ($capacityNextSprint / $this->getPlannedWorkingDays()));
     }
 
-    private function calculateAverageVelocity(int $numberOfSprints = 3): float
+    private function calculateAverageVelocity(int $numberOfSprints = 3): int
     {
         $total = 0;
         foreach ($this->get($numberOfSprints) as $sprint) {
-            $total += $sprint->velocity();
+            $velocity = $sprint->getVelocity();
+            $capacity = $this->calculateSprintCapacity($sprint);
+            $total += $velocity / ($capacity / $this->getPlannedWorkingDays());
         }
 
-        return round($total / $numberOfSprints);
+        return (int)round($total / $numberOfSprints);
     }
 
     /**
      * @param int $numberOfSprints
-     * @return ClosedSprint[]
+     * @return Sprint[]
      */
     private function get(int $numberOfSprints): array
     {
         $sprints = $this->sprintProvider->getClosedSprints();
-        usort($sprints, static function(ClosedSprint $a, ClosedSprint $b) {
+        usort($sprints, static function(Sprint $a, Sprint $b) {
             return $b->id() - $a->id();
         });
 
         return array_slice($sprints, 0, $numberOfSprints);
     }
 
-    private function calculateCapacity(): int
+    private function calculateSprintCapacity(Sprint $sprint): int
     {
-        return $this->getPlannedWorkingDays() - $this->absences();
+        return $this->getPlannedWorkingDays() - $this->calculateTotalAbsences($sprint);
     }
 
     private function getPlannedWorkingDays(): int // todo calculate this based on the team members
     {
         // number of team members * working days in a sprint
-        return 60;
+        return 70;
     }
 
-    private function absences(): int
+    private function calculateTotalAbsences(Sprint $sprint): int
     {
+        $sprintDuration = $sprint->getSprintDuration();
         // todo conflict resolution. eg open code friday and public holiday etc
-        $absence = $this->absenceProvider->getVacationDays() + $this->absenceProvider->getSickDays();
-        $nextSprint = $this->sprintProvider->getNextSprint();
+        $absence = $this->absenceProvider->getVacationDays($sprintDuration) + $this->absenceProvider->getSickDays($sprintDuration);
 
-        $publicHolidays = $this->publicHolidayProvider->numberOfPublicHolidays($nextSprint->getSprintDuration());
+        $publicHolidays = $this->publicHolidayProvider->numberOfPublicHolidays($sprintDuration);
         if ($publicHolidays) {
             $absence += $publicHolidays * 6;
         }
 
-        if ($nextSprint->hasOpenCodeFriday()) {
+        if ($sprint->hasOpenCodeFriday()) {
             $absence += 6;
         }
 
